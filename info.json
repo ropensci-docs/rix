@@ -1,0 +1,12 @@
+{
+  "commit": {
+    "commit": "290ccd92f8604f4055701f74e727fb6807a0373b",
+    "author": "Bruno Rodrigues <brodriguesco@protonmail.com>",
+    "time": "2025-01-28 06:00:21",
+    "files": 1,
+    "merge": true,
+    "message": "Merge pull request #397 from ropensci/available_dates\n\nUpdate available dates"
+  },
+  "repo": "https://github.com/ropensci/rix",
+  "pkg": "rix"
+}
