@@ -1,0 +1,12 @@
+{
+  "commit": {
+    "commit": "4d6d102d37cc7a169931b3cbc0f575b1b0c73286",
+    "author": "Bruno Rodrigues <brodriguesco@protonmail.com>",
+    "time": "2025-02-06 09:18:35",
+    "files": 1,
+    "merge": false,
+    "message": "trigger actions to check availability of services"
+  },
+  "repo": "https://github.com/ropensci/rix",
+  "pkg": "rix"
+}
