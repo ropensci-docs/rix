@@ -1,0 +1,24 @@
+pandoc: 3.2.1
+pkgdown: 2.1.0
+pkgdown_sha: ~
+articles:
+  a-getting-started: a-getting-started.html
+  b1-setting-up-and-using-rix-on-linux-and-windows: b1-setting-up-and-using-rix-on-linux-and-windows.html
+  b2-setting-up-and-using-rix-on-macos: b2-setting-up-and-using-rix-on-macos.html
+  c-using-rix-to-build-project-specific-environments: c-using-rix-to-build-project-specific-environments.html
+  d1-installing-r-packages-in-a-nix-environment: d1-installing-r-packages-in-a-nix-environment.html
+  d2-installing-system-tools-and-texlive-packages-in-a-nix-environment: d2-installing-system-tools-and-texlive-packages-in-a-nix-environment.html
+  e-configuring-ide: e-configuring-ide.html
+  f-renv2nix: f-renv2nix.html
+  z-advanced-topic-building-an-environment-for-literate-programming: z-advanced-topic-building-an-environment-for-literate-programming.html
+  z-advanced-topic-handling-packages-with-remote-dependencies: z-advanced-topic-handling-packages-with-remote-dependencies.html
+  z-advanced-topic-reproducible-analytical-pipelines-with-nix: z-advanced-topic-reproducible-analytical-pipelines-with-nix.html
+  z-advanced-topic-running-r-or-shell-code-in-nix-from-r: z-advanced-topic-running-r-or-shell-code-in-nix-from-r.html
+  z-advanced-topic-using-nix-inside-docker: z-advanced-topic-using-nix-inside-docker.html
+  z-binary_cache: z-binary_cache.html
+  z-bleeding_edge: z-bleeding_edge.html
+  z-contributing_to_nixpkgs: z-contributing_to_nixpkgs.html
+last_built: 2025-02-13T13:28Z
+urls:
+  reference: https://docs.ropensci.org/rix/reference
+  article: https://docs.ropensci.org/rix/articles

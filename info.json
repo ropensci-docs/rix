@@ -1,0 +1,12 @@
+{
+  "commit": {
+    "commit": "88bb24fe7a9adba2bd1dfedf143a3b250df94658",
+    "author": "Bruno Rodrigues <brodriguesco@protonmail.com>",
+    "time": "2025-02-13 12:00:21",
+    "files": 1,
+    "merge": false,
+    "message": "Update README.md"
+  },
+  "repo": "https://github.com/ropensci/rix",
+  "pkg": "rix"
+}
