@@ -1,0 +1,27 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  binary-cache: binary-cache.html
+  bleeding-edge: bleeding-edge.html
+  configuring-ide: configuring-ide.html
+  contributing-to-nixpkgs: contributing-to-nixpkgs.html
+  developing-packages: developing-packages.html
+  getting-started: getting-started.html
+  installing-r-packages: installing-r-packages.html
+  installing-system-tools: installing-system-tools.html
+  literate-programming: literate-programming.html
+  nix-inside-docker: nix-inside-docker.html
+  packaging-your-code: packaging-your-code.html
+  project-environments: project-environments.html
+  remote-dependencies: remote-dependencies.html
+  renv2nix: renv2nix.html
+  reproducible-pipelines: reproducible-pipelines.html
+  running-code-in-nix: running-code-in-nix.html
+  setting-up-linux-windows: setting-up-linux-windows.html
+  setting-up-macos: setting-up-macos.html
+  walkthrough-project: walkthrough-project.html
+last_built: 2026-08-31T20:59Z
+urls:
+  reference: https://docs.ropensci.org/rix/reference
+  article: https://docs.ropensci.org/rix/articles

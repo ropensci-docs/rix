@@ -1,0 +1,329 @@
+# Generate a Nix Expression That Builds a Reproducible Development Environment
+
+Generate a Nix Expression That Builds a Reproducible Development
+Environment
+
+## Usage
+
+``` r
+rix(
+  r_ver = NULL,
+  date = NULL,
+  r_pkgs = NULL,
+  system_pkgs = NULL,
+  git_pkgs = NULL,
+  local_r_pkgs = NULL,
+  tex_pkgs = NULL,
+  py_conf = NULL,
+  jl_conf = NULL,
+  ide = "none",
+  project_path,
+  overwrite = FALSE,
+  print = FALSE,
+  message_type = "simple",
+  shell_hook = NULL,
+  ignore_remotes_cache = FALSE
+)
+```
+
+## Arguments
+
+- r_ver:
+
+  Character. The required R version, for example "4.0.0". You can check
+  which R versions are available using
+  [`available_r()`](https://docs.ropensci.org/rix/reference/available_r.md),
+  and for more details check
+  [`available_df()`](https://docs.ropensci.org/rix/reference/available_df.md).
+  For reproducibility purposes, you can also provide a `nixpkgs`
+  revision directly. For older versions of R, `nix-build` might fail
+  with an error stating 'this derivation is not meant to be built'. In
+  this case, simply drop into the shell with `nix-shell` instead of
+  building it first. It is also possible to provide either
+  "bleeding-edge" or "frozen-edge" if you need an environment with
+  bleeding edge packages. Read more in the "Details" section below.
+
+- date:
+
+  Character. Instead of providing `r_ver`, it is also possible to
+  provide a date. This will build an environment containing R and R
+  packages (and other dependencies) as of that date. You can check which
+  dates are available with
+  [`available_dates()`](https://docs.ropensci.org/rix/reference/available_dates.md).
+  For more details about versions check
+  [`available_df()`](https://docs.ropensci.org/rix/reference/available_df.md).
+
+- r_pkgs:
+
+  Vector of characters. List the required R packages for your analysis
+  here.
+
+- system_pkgs:
+
+  Vector of characters. List further software you wish to install that
+  are not R packages such as command line applications for example. You
+  can look for available software on the NixOS website
+  <https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=>
+
+- git_pkgs:
+
+  List. A list of packages to install from Git. See details for more
+  information.
+
+- local_r_pkgs:
+
+  Vector of characters, paths to local packages to install. These
+  packages need to be in the `.tar.gz` or `.zip` formats and must be in
+  the same folder as the generated "default.nix" file.
+
+- tex_pkgs:
+
+  Vector of characters. A set of TeX packages to install. Use this if
+  you need to compile `.tex` documents, or build PDF documents using
+  Quarto. If you don't know which package to add, start by adding
+  "amsmath". See the
+  `vignette("d2- installing-system-tools-and-texlive-packages-in-a-nix-environment")`
+  for more details.
+
+- py_conf:
+
+  List. A list containing two or three elements: `py_version`,
+  `py_pkgs`, and optionally `py_src_dir`. `py_version` should be in the
+  form `"3.12"` for Python 3.12, and `py_pkgs` should be an atomic
+  vector of package names (e.g.,
+  `py_pkgs = c("polars", "plotnine", "great-tables")`). If Python
+  packages are requested but `{reticulate}` is not in the list of R
+  packages, the user will be warned that they may want to add it. When
+  `py_conf` packages are requested, the `RETICULATE_PYTHON` environment
+  variable is set to ensure the Nix environment does not use a
+  system-wide Python installation. If you are developing a Python
+  package, set `"mypackage/src"` or just `"src"`). This adds
+  `PYTHONPATH` to the shell hook so your package can be imported without
+  installation. This is the Nix equivalent of `pip install -e .`
+  (editable install). Note: if `"uv"` is in `system_pkgs`,
+  `LD_LIBRARY_PATH` is automatically configured for dynamic library
+  loading (required by packages like numpy). You can also install
+  packages from git or PyPI by adding `git_pkgs` (list of lists with
+  `package_name`, `repo_url`, `commit`) and `pypi_pkgs` (vector of
+  package names, optionally with version `name@version`) to the
+  `py_conf` list.
+
+- jl_conf:
+
+  List. A list of two elements, `jl_version` and `jl_conf`. `jl_version`
+  must be of the form `"1.10"` for Julia 1.10. Leave empty or use an
+  empty string to use the latest version, or use `"lts"` for the long
+  term support version. `jl_conf` must be an atomic vector of packages
+  names, for example `jl_conf = c("TidierData", "TidierPlots")`.
+
+- ide:
+
+  Character, defaults to "none". If you wish to use RStudio to work
+  interactively use "rstudio" or "rserver" for the server version. Use
+  "code" for Visual Studio Code or "codium" for Codium, or "positron"
+  for Positron. You can also use "radian", an interactive REPL. This
+  will install a project-specific version of the chosen editor which
+  will be differrent than the one already present in your system (if
+  any). For other editors or if you want to use an editor already
+  installed on your system (which will require some configuration to
+  make it work seamlessly with Nix shells see the
+  [`vignette("configuring-ide")`](https://docs.ropensci.org/rix/articles/configuring-ide.md)
+  for configuration examples), use "none". Please be aware that VS Code
+  and Positron are not free software. To facilitate their installation,
+  `rix()` automatically enables a required setting without prompting the
+  user for confirmation. See the "Details" section below for more
+  information.
+
+- project_path:
+
+  Character, where to write `default.nix`, for example
+  "/home/path/to/project". The file will thus be written to the file
+  "/home/path/to/project/default.nix". If the folder does not exist, it
+  will be created.
+
+- overwrite:
+
+  Logical, defaults to FALSE. If TRUE, overwrite the `default.nix` file
+  in the specified path.
+
+- print:
+
+  Logical, defaults to FALSE. If TRUE, print `default.nix` to console.
+
+- message_type:
+
+  Character. Message type, defaults to `"simple"`, which gives minimal
+  but sufficient feedback. Other values are currently `"quiet`, which
+  generates the files without message, and `"verbose"`, displays all the
+  messages.
+
+- shell_hook:
+
+  Character of length 1, defaults to `NULL`. Commands added to the
+  `shellHook` variable are executed when the Nix shell starts. So by
+  default, using `nix-shell default.nix` will start a specific program,
+  possibly with flags (separated by space), and/or do shell actions. You
+  can for example use `shell_hook = R`, if you want to directly enter
+  the declared Nix R session when dropping into the Nix shell.
+
+- ignore_remotes_cache:
+
+  Logical, defaults to FALSE. This variable is only needed when adding
+  packages from GitHub with remote dependencies, it can be ignored
+  otherwise. If `TRUE`, the cache of already processed GitHub remotes
+  will be ignored and all packages will be processed. If `FALSE`, the
+  cache will be used to skip already processed packages, which makes use
+  of fewer API calls. Setting this argument to `TRUE` can be useful for
+  debugging.
+
+## Value
+
+Nothing, this function only has the side-effect of writing two files:
+`default.nix` and `.Rprofile` in the working directory. `default.nix`
+contains a Nix expression to build a reproducible environment using the
+Nix package manager, and `.Rprofile` ensures that a running R session
+from a Nix environment cannot access local libraries, nor install
+packages using
+[`install.packages()`](https://rdrr.io/r/utils/install.packages.html)
+(nor remove nor update them).
+
+## Details
+
+This function will write a `default.nix` and an `.Rprofile` in the
+chosen path. Using the Nix package manager, it is then possible to build
+a reproducible development environment using the `nix-build` command in
+the path. This environment will contain the chosen version of R and
+packages, and will not interfere with any other installed version (via
+Nix or not) on your machine. Every dependency, including both R package
+dependencies but also system dependencies like compilers will get
+installed as well in that environment.
+
+It is possible to use environments built with Nix interactively, either
+from the terminal, or using an interface such as RStudio. If you want to
+use RStudio, set the `ide` argument to `"rstudio"`. Please be aware that
+for macOS, RStudio is only available starting from R version 4.4.3 or
+from the 2025-02-28. As such, you may want to use another editor on
+macOS if you need to use an environment with an older version of R. To
+use Visual Studio Code (or Codium), set the `ide` argument to `"code"`
+or `"codium"` respectively, which will add the `{languageserver}` R
+package to the list of R packages to be installed by Nix in that
+environment. It is also possible to use Positron by setting the `ide`
+argument to `"positron"`. Setting the `ide` argument to an editor will
+install it from Nix, meaning that each of your projects can have a
+dedicated IDE (or IDE version). `"radian"` and `"rserver"` are also
+options.
+
+Instead of using Nix to install an IDE, you can also simply use the one
+you have already installed on your system, with the exception of RStudio
+which must be managed by Nix to "see" Nix environments. Positron must
+also be heavily configured to work with Nix shells, so we recommend
+installing it using Nix. To use an editor that you already have
+installed on your system, set `ide = "none"` and refer to the
+[`vignette("configuring-ide")`](https://docs.ropensci.org/rix/articles/configuring-ide.md)
+for more details on how to set up your editor to work with Nix shells.
+
+Packages to install from GitHub, GitLab, or other custom Git hosts
+(Forgejo, Gitea, cgit, etc.) must be provided in a list of 3 elements:
+"package_name", "repo_url" and "commit". To install several packages,
+provide a list of lists of these 3 elements, one per package to install.
+It is also possible to install old versions of packages by specifying a
+version. For example, to install the latest version of `{AER}` but an
+old version of `{ggplot2}`, you could write:
+`r_pkgs = c("AER", "ggplot2@2.2.1")`. Note however that doing this could
+result in dependency hell, because an older version of a package might
+need older versions of its dependencies, but other packages might need
+more recent versions of the same dependencies. If instead you want to
+use an environment as it would have looked at the time of `{ggplot2}`'s
+version 2.2.1 release, then use the Nix revision closest to that date,
+by setting `r_ver = "3.1.0"`, which was the version of R current at the
+time. This ensures that Nix builds a completely coherent environment.
+For security purposes, users that wish to install packages from GitHub,
+GitLab, or other Git hosts, or from the CRAN archives must provide a
+security hash for each package. `{rix}` automatically precomputes this
+hash for the source directory of R packages from Git hosts or from the
+CRAN archives, to make sure the expected trusted sources that match the
+precomputed hashes in the `default.nix` are downloaded, but only if Nix
+is installed. If you need to generate an expression with such packages,
+but are working on a system where you can't install Nix, consider
+generating the expression using a continuous integration service, such
+as GitHub Actions.
+
+For **private repositories**, an optional fourth element `"private"` can
+be set to `TRUE`. When `private = TRUE`, you must provide an SSH URL
+(e.g., `git@github.com:org/repo.git`) instead of an HTTPS URL. The
+package will be fetched using `builtins.fetchGit` which uses your SSH
+keys for authentication. Note that this has tradeoffs: it works
+seamlessly with SSH keys, but cannot be cached in Nix binary caches and
+may not work in pure Nix evaluation mode or some CI/CD environments. See
+the
+[`vignette("installing-r-packages")`](https://docs.ropensci.org/rix/articles/installing-r-packages.md)
+for more details on installing from private repositories.
+
+Note that installing packages from Git or old versions using the `"@"`
+notation or local packages, does not leverage Nix's capabilities for
+dependency solving. As such, you might have trouble installing these
+packages. If that is the case, open an issue on `{rix}`'s GitHub
+repository.
+
+If GitHub packages have dependencies on GitHub as well, `{rix}` will
+attempt to generate the correct expression, but we highly recommend you
+read the
+[`vignette("remote-dependencies")`](https://docs.ropensci.org/rix/articles/remote-dependencies.md)
+Vignette.
+
+By default, the Nix shell will be configured with `"en_US.UTF-8"` for
+the relevant locale variables (`LANG`, `LC_ALL`, `LC_TIME`,
+`LC_MONETARY`, `LC_PAPER`, `LC_MEASUREMENT`). This is done to ensure
+locale reproducibility by default in Nix environments created with
+`rix()`. If there are good reasons to not stick to the default, you can
+set your preferred locale variables via
+`options(rix.nix_locale_variables = list(LANG = "de_CH.UTF-8", <...>)`
+and the aforementioned locale variable names.
+
+It is possible to use `"bleeding-edge`" or `"frozen-edge`" as the value
+for the `r_ver` argument. This will create an environment with the very
+latest R packages. `"bleeding-edge`" means that every time you will
+build the environment, the packages will get updated. This is especially
+useful for environments that need to be constantly updated, for example
+when developing a package. In contrast, `"frozen-edge`" will create an
+environment that will remain stable at build time. So if you create a
+`default.nix` file using `"bleeding-edge`", each time you build it using
+`nix-build` that environment will be up-to-date. With `"frozen-edge`"
+that environment will be up-to-date on the date that the `default.nix`
+will be generated, and then each subsequent call to `nix-build` will
+result in the same environment. `"bioc-devel"` is the same as
+`"bleeding-edge"`, but also adds the development version of
+Bioconductor. `"r-devel"` is the same as bleeding edge, but with the R
+development version instead of the latest stable version and
+`"r-devel-bioc-devel"` is the same as `"r-devel"` but with Bioconductor
+on the development version. We highly recommend you read the vignette
+titled "z - Advanced topic: Understanding the rPackages set release
+cycle and using bleeding edge packages".
+
+## See also
+
+Other core functions:
+[`rix_init()`](https://docs.ropensci.org/rix/reference/rix_init.md)
+
+## Examples
+
+``` r
+if (FALSE) { # \dontrun{
+# Build an environment with the latest version of R available from Nixpkgs
+# and the dplyr and ggplot2 packages
+rix(
+  r_ver = "latest-upstream",
+  r_pkgs = c("dplyr", "ggplot2"),
+  system_pkgs = NULL,
+  git_pkgs = NULL,
+  local_r_pkgs = NULL,
+  ide = "code",
+  project_path = path_default_nix,
+  overwrite = TRUE,
+  print = TRUE,
+  message_type = "simple",
+  shell_hook = NULL,
+  ignore_remotes_cache = FALSE
+)
+} # }
+```

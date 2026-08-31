@@ -1,0 +1,366 @@
+# Setting Up and Using Nix and Rix on Linux and Windows
+
+*This vignette covers Linux- and Windows-specific topics. If you’re
+using macOS instead, read the
+[`vignette("setting-up-macos")`](https://docs.ropensci.org/rix/articles/setting-up-macos.md)
+vignette.*
+
+## Introduction
+
+Nix officially supports only two operating systems: macOS and Linux.
+Windows support comes via WSL2, which runs a real Linux distribution
+under the hood — so for our purposes, Linux and Windows can be treated
+as a single case, with macOS as the separate one. Because Windows relies
+on WSL2, you’ll need WSL2 running before installing Nix.
+
+Note that you don’t need Nix installed to use
+[rix](https://docs.ropensci.org/rix/) itself: the package can generate
+Nix expressions on any system, you just won’t be able to *build* them
+without Nix. So if you can’t install Nix on your machine but already
+have R, you can skip ahead to the last section of this vignette to
+install [rix](https://docs.ropensci.org/rix/) on its own.
+
+## Why rix *and* Nix?
+
+To reiterate: [rix](https://docs.ropensci.org/rix/) will generate valid
+Nix expressions even on a system where Nix isn’t installed. The catch is
+that you won’t be able to build those expressions until Nix is actually
+present.
+
+## Installing Nix
+
+### Windows prerequisites
+
+On Windows, you’ll need the Windows Subsystem for Linux 2 (WSL2) to run
+Nix. On a recent version of Windows 10 or 11, install it by running the
+following as an administrator in PowerShell:
+
+``` bash
+wsl --install
+```
+
+For more details, see [Microsoft’s official WSL installation
+docs](https://learn.microsoft.com/en-us/windows/wsl/install).
+
+We recommend enabling systemd in Ubuntu WSL2, since this allows users
+other than `root` to run Nix. Follow [Microsoft’s systemd
+guide](https://learn.microsoft.com/en-us/windows/wsl/systemd#how-to-enable-systemd):
+
+``` sh
+# in WSL2 Ubuntu shell
+
+sudo -i
+nano /etc/wsl.conf
+```
+
+This opens `/etc/wsl.conf` in nano, a command-line text editor. Add the
+following:
+
+    [boot]
+    systemd=true
+
+Save with CTRL-O, then exit nano with CTRL-X. Back in PowerShell, run:
+
+``` bash
+wsl --shutdown
+```
+
+Then relaunch WSL (Ubuntu) from the Start menu.
+
+Once WSL2 is set up, you can install Nix as usual — we recommend the
+Determinate Systems installer, described next.
+
+### Using the Determinate Systems installer
+
+Again, you don’t need Nix installed to generate expressions with
+[rix](https://docs.ropensci.org/rix/) — but you do need it if you
+actually want to build the environments it defines.
+
+Installing (and uninstalling) Nix is straightforward thanks to the
+installer from [Determinate
+Systems](https://determinate.systems/posts/determinate-nix-installer), a
+company that builds services and tools on top of Nix.
+
+Avoid installing Nix through your operating system’s package manager.
+Instead, open a terminal and run:
+
+``` sh
+curl --proto '=https' --tlsv1.2 -sSf \
+     -L https://install.determinate.systems/nix | \
+    sh -s -- install --no-confirm --extra-conf "
+trusted-users = root $USER
+substituters = https://cache.nixos.org https://rstats-on-nix.cachix.org
+trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= rstats-on-nix.cachix.org-1:vdiiVgocg6WeJrODIqdprZRUrhi1JzhBnXv7aWI6+F0="
+```
+
+On Windows, if you’ve decided not to (or can’t) enable systemd, append
+`--init none` to the command above. See the [Determinate Nix Installer
+page](https://github.com/DeterminateSystems/nix-installer) for details.
+
+This installer automatically configures the **rstats-on-nix** Cachix
+cache, which provides pre-built binaries for many R packages and
+significantly speeds up environment creation. Many thanks to
+[Cachix](https://www.cachix.org/) for sponsoring the `rstats-on-nix`
+cache!
+
+## If you installed Nix another way
+
+If you used the official Nix installer, Lix, or some other method,
+you’ll need to configure the **rstats-on-nix** Cachix cache yourself.
+
+### Recommended: `setup_cachix()`
+
+The simplest approach is to let [rix](https://docs.ropensci.org/rix/)
+configure the cache for you.
+
+First, start R from a temporary Nix shell:
+
+``` bash
+nix-shell -p R rPackages.rix
+```
+
+Then run:
+
+``` r
+
+rix::setup_cachix()
+```
+
+This updates `~/.config/nix/nix.conf`.
+
+You’ll also need to add yourself as a trusted user:
+
+``` bash
+echo "trusted-users = root $USER" | sudo tee -a /etc/nix/nix.conf && sudo systemctl restart nix-daemon
+```
+
+(Note: `/etc/nix/nix.custom.conf` is a Determinate Systems-specific
+mechanism, included by their managed `nix.conf` so that your
+customizations survive installer updates. Since this section covers
+non-Determinate installs, edit `/etc/nix/nix.conf` directly instead.)
+
+If you later see warnings like `ignoring untrusted substituter`, it
+usually means this step was skipped.
+
+### Alternative: the `cachix` client
+
+You can instead configure the cache manually with the `cachix`
+command-line client:
+
+``` bash
+nix-env -iA cachix -f https://cachix.org/api/v1/install
+cachix use rstats-on-nix
+```
+
+### Optional: add Mischko Heming’s binary cache
+
+Once the `rstats-on-nix` cache is configured, you can also enable
+Mischko Heming’s binary cache — see [Using Mischko Heming’s binary
+cache](#using-mischko-hemings-binary-cache) below.
+
+### NixOS users
+
+On NixOS, Nix configuration is managed declaratively through your system
+configuration, so neither
+[`setup_cachix()`](https://docs.ropensci.org/rix/reference/setup_cachix.md)
+nor `cachix use` will work. Instead, add the cache to your
+`configuration.nix`:
+
+``` nix
+nix.settings = {
+  substituters = [
+    "https://cache.nixos.org"
+    "https://rstats-on-nix.cachix.org"
+  ];
+  trusted-public-keys = [
+    "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+    "rstats-on-nix.cachix.org-1:vdiiVgocg6WeJrODIqdprZRUrhi1JzhBnXv7aWI6+F0="
+  ];
+};
+```
+
+If you use Home Manager, add this to your home configuration instead:
+
+``` nix
+nix.settings = {
+  substituters = [
+    "https://rstats-on-nix.cachix.org"
+  ];
+  trusted-public-keys = [
+    "rstats-on-nix.cachix.org-1:vdiiVgocg6WeJrODIqdprZRUrhi1JzhBnXv7aWI6+F0="
+  ];
+};
+```
+
+Then rebuild your system with `sudo nixos-rebuild switch` (or
+`home-manager switch` for Home Manager).
+
+## Using Mischko Heming’s binary cache
+
+To use the [binary cache](https://github.com/mihem/attic) by [Mischko
+Heming](https://www.mheming.com), add this to `~/.config/nix/nix.conf`:
+
+``` text
+extra-substituters = https://osmzhlab.uni-muenster.de:4949/r-packages
+extra-trusted-public-keys = r-packages:Op7Q3XME8az4XNcP1clupGw4ZbuaguBw+sUziweqpTY=
+```
+
+On NixOS, add this to your `configuration.nix` instead:
+
+``` nix
+{
+  nix.settings = {
+    extra-substituters = [
+      "https://osmzhlab.uni-muenster.de:4949/r-packages"
+    ];
+
+    extra-trusted-public-keys = [
+      "r-packages:Op7Q3XME8az4XNcP1clupGw4ZbuaguBw+sUziweqpTY="
+    ];
+  };
+}
+```
+
+On NixOS, rebuild with `sudo nixos-rebuild switch` (or
+`home-manager switch` for Home Manager). For regular Nix installations
+and flake-based projects, the settings take effect on the next Nix
+operation.
+
+## A note on disk space
+
+Once Nix is installed on Linux, everything it builds gets stored under
+the `/nix` directory on the root partition. Since this partition is
+often small, and complete development environments built with Nix can
+take up substantial space, we recommend mounting `/nix` on a partition
+with more room (for example, a secondary hard drive) if space is tight.
+To do this, edit `/etc/fstab` and add the following line at the end:
+
+    /home/path_to/nix /nix none bind 0 0
+
+This maps `/nix` to `/home/path_to/nix`, which can live on a larger
+partition. If your root partition already has enough space, you can skip
+this step.
+
+## Installing rix
+
+With Nix installed and the binary caches configured, the last step is
+getting [rix](https://docs.ropensci.org/rix/) itself onto your system.
+How you do that depends on whether R is already installed:
+
+### Case 1: you don’t have R installed and want to install it via Nix
+
+If you have Nix installed but not R, you have two options. You could
+install R the usual way for your OS and then install
+[rix](https://docs.ropensci.org/rix/) on top of it — from there,
+generate project-specific expressions and build them. Or you could
+install R through Nix directly. Running the following in a terminal
+drops you into an interactive R session you can use right away:
+
+    nix-shell -p R rPackages.rix
+
+Or, if you’d prefer the development version of
+[rix](https://docs.ropensci.org/rix/):
+
+    nix-shell --expr "$(curl -sl https://raw.githubusercontent.com/ropensci/rix/master/inst/extdata/default.nix)"
+
+This should launch an R session directly in your terminal. From there
+you can run something like:
+
+``` r
+
+library(rix)
+
+rix(
+  r_ver = "4.4.2",
+  r_pkgs = c("dplyr", "ggplot2"),
+  system_pkgs = NULL,
+  git_pkgs = NULL,
+  ide = "none",
+  project_path = ".",
+  overwrite = TRUE
+)
+```
+
+This generates a `default.nix`, which you can then use to build an
+environment with R, [dplyr](https://dplyr.tidyverse.org), and
+[ggplot2](https://ggplot2.tidyverse.org). To add more packages later,
+rerun the command with the additional packages listed in `r_pkgs`. Be
+careful: if a `default.nix` already exists in your working directory,
+running [`rix()`](https://docs.ropensci.org/rix/reference/rix.md) with
+`overwrite = TRUE` will overwrite it — so make sure you’re using version
+control to avoid unpleasant surprises.
+
+For more on managing project-specific `default.nix` files, see the
+[`vignette("installing-r-packages")`](https://docs.ropensci.org/rix/articles/installing-r-packages.md)
+and
+[`vignette("installing-system-tools")`](https://docs.ropensci.org/rix/articles/installing-system-tools.md)
+vignettes.
+
+You can also include [rix](https://docs.ropensci.org/rix/) itself in
+your project-specific environments by generating a `default.nix` like
+this:
+
+``` r
+
+rix(
+  r_ver = "latest-upstream",
+  r_pkgs = NULL,
+  git_pkgs = list(
+    package_name = "rix",
+    repo_url = "https://github.com/ropensci/rix",
+    commit = "76d1bdd03d78589d399b4b9d473ecde616920a82"
+  ),
+  ide = "none",
+  project_path = ".",
+  overwrite = TRUE
+)
+```
+
+Update the commit to a more recent one and adjust `project_path` as
+needed.
+
+### Case 2: you already have R installed via your OS’s package manager
+
+*Note: we recommend managing all your R versions through Nix rather than
+mixing a system-wide R installation with Nix-managed R shells.*
+
+If R is already installed on your system through the usual channels
+(i.e., not via Nix), you can still install
+[rix](https://docs.ropensci.org/rix/) as you normally would:
+
+``` r
+
+install.packages("rix")
+```
+
+Or via r-universe:
+
+``` r
+
+install.packages("rix", repos = c(
+  "https://ropensci.r-universe.dev",
+  "https://cloud.r-project.org"
+))
+```
+
+From there, use [rix](https://docs.ropensci.org/rix/) to generate
+expressions as described in the next vignette,
+[`vignette("project-environments")`](https://docs.ropensci.org/rix/articles/project-environments.md).
+
+## Configuring an IDE
+
+Next, we recommend continuing with
+[`vignette("installing-r-packages")`](https://docs.ropensci.org/rix/articles/installing-r-packages.md)
+and
+[`vignette("installing-system-tools")`](https://docs.ropensci.org/rix/articles/installing-system-tools.md),
+followed by
+[`vignette("configuring-ide")`](https://docs.ropensci.org/rix/articles/configuring-ide.md),
+which walks through setting up your editor to work with Nix shells
+effectively.
+
+## Other “Nix”es
+
+Several other implementations of the Nix package manager exist, if
+you’re feeling adventurous — but for now, we recommend sticking with Nix
+itself. If you’re curious, check out
+[Lix](https://lix.systems/install/)!

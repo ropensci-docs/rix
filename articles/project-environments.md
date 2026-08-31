@@ -1,0 +1,338 @@
+# Using Rix to Build Project Specific Environments
+
+## Project-specific Nix environments
+
+Now that you have the required software installed, it’s to time learn
+more about declaring and using reproducible environments.
+
+The ideal workflow when using [rix](https://docs.ropensci.org/rix/) is
+to create a new, separate environment at the start of a project. Let’s
+say that you wish to analyse some data set, and need
+[dplyr](https://dplyr.tidyverse.org) and
+[ggplot2](https://ggplot2.tidyverse.org). Let’s also suppose that you
+use VS Code as your IDE (there will be more discussion on editors in the
+vignette
+[`vignette("configuring-ide")`](https://docs.ropensci.org/rix/articles/configuring-ide.md)
+but for now, let’s assume that you use VS Code). With the
+[`rix::rix()`](https://docs.ropensci.org/rix/reference/rix.md) function,
+you can easily generate the right `default.nix` file. You need to
+provide the following inputs to
+[`rix()`](https://docs.ropensci.org/rix/reference/rix.md):
+
+- `r_ver`: the version of R required. Use `"latest-upstream"` for the
+  latest version, and use
+  [`available_r()`](https://docs.ropensci.org/rix/reference/available_r.md)
+  to check which versions are available;
+- `date`: instead of `r_ver`, use `date` to specify a date. This date
+  corresponds to a CRAN snapshot of that day. Current R versions and
+  latest release of Bioconductor at that date are also provided. Check
+  available dates using
+  [`available_dates()`](https://docs.ropensci.org/rix/reference/available_dates.md);
+- `r_pkgs`: the required R packages. For example “dplyr” (more on this
+  in the vignette
+  [`vignette("installing-r-packages")`](https://docs.ropensci.org/rix/articles/installing-r-packages.md));
+- `system_pkgs`: the required system packages, if needed. For example
+  “quarto”, or a Python interpreter (more on this in the vignette
+  [`vignette("installing-system-tools")`](https://docs.ropensci.org/rix/articles/installing-system-tools.md));
+- `git_pkgs`: list of git packages to add (more on this in the vignette
+  [`vignette("installing-r-packages")`](https://docs.ropensci.org/rix/articles/installing-r-packages.md));
+- `ide`: the integrated development editor to use (more on this in the
+  vignette
+  [`vignette("configuring-ide")`](https://docs.ropensci.org/rix/articles/configuring-ide.md))
+- `path`: the path where to save the `default.nix` file.
+- `overwrite`: whether to overwrite the `default.nix` file or not.
+- `print`: whether to print the `default.nix` file to the console or
+  not.
+
+Run the following command to generate a `default.nix` file:
+
+``` r
+
+path_default_nix <- tempdir()
+
+rix(
+  r_ver = "latest-upstream",
+  r_pkgs = c("dplyr", "ggplot2"),
+  system_pkgs = NULL,
+  git_pkgs = NULL,
+  ide = "code",
+  project_path = path_default_nix,
+  overwrite = TRUE,
+  print = TRUE
+)
+#> let
+#>  pkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/12a9c0004bc987afb1ff511ebb97b67497a68e22.tar.gz") {};
+#>
+#>   rpkgs = builtins.attrValues {
+#>     inherit (pkgs.rPackages)
+#>       dplyr
+#>       ggplot2
+#>       languageserver;
+#>   };
+#>
+#>   system_packages = builtins.attrValues {
+#>     inherit (pkgs)
+#>       R
+#>       glibcLocales
+#>       nix;
+#>   };
+#>
+#> in
+#>
+#> pkgs.mkShell {
+#>   LOCALE_ARCHIVE = if pkgs.system == "x86_64-linux" then  "${pkgs.glibcLocales}/lib/locale/locale-archive" else "";
+#>   LANG = "en_US.UTF-8";
+#>    LC_ALL = "en_US.UTF-8";
+#>    LC_TIME = "en_US.UTF-8";
+#>    LC_MONETARY = "en_US.UTF-8";
+#>    LC_PAPER = "en_US.UTF-8";
+#>    LC_MEASUREMENT = "en_US.UTF-8";
+#>
+#>   buildInputs = [  rpkgs  system_packages   ];
+#>
+#> }
+```
+
+To start using this environment, open a terminal in the folder
+containing `default.nix` and use the following Nix command:
+
+    nix-build
+
+`nix-build` is a Nix command that builds an environment according to the
+specifications found in a `default.nix` file. Once the environment is
+done building, you should find a new file called `result` next to the
+`default.nix` file. This file is a symlink to the software installed by
+Nix. [rix](https://docs.ropensci.org/rix/) also provides a
+[`nix_build()`](https://docs.ropensci.org/rix/reference/nix_build.md)
+function to build Nix environments from within an interactive R session,
+but it is not always guaranteed to succeed, due to differences in
+platforms. This is explained in more detail in the following vignette
+[`vignette("running-code-in-nix")`](https://docs.ropensci.org/rix/articles/running-code-in-nix.md).
+In case of doubt, run `nix-build` from your usual terminal application.
+
+To now use the environment, type in the same terminal as before:
+
+    nix-shell
+
+This will activate the environment. If you have VS Code installed you
+can start it from this environment and VS Code will use this specific R
+version library of packages. We will explore this in greater detail in
+the vignette
+[`vignette("configuring-ide")`](https://docs.ropensci.org/rix/articles/configuring-ide.md).
+
+## Which `r_ver` should you choose?
+
+There are several options for `r_ver` and each have a specific purpose.
+The table below explains this:
+
+| r_ver or date | Intended use | State of R version | State of CRAN packages | State of Bioconductor packages | State of other packages in Nixpkgs |
+|----|----|----|----|----|----|
+| r_ver = "latest-upstream" | Start of new project where versions don’t matter | Current or previous | Outdated (up to 6 months) | Outdated (up to 6 months) | Current at time of generation |
+| r_ver = "4.4.2" | Reproducing old project or starting a new project where versions don’t matter | Same as in \`r_ver\`, check \`available_r()\` | Outdated (up to 2 months if using latest release) | Outdated (up to 2 months if using latest release) | Potentially outdated (up to 12 months) |
+| r_ver = "2024-12-14" | Reproducing old project or starting a new project using the most recent date | Current at that date, check \`available_dates()\` | Current at that date, check \`available_dates()\` | Current at that date, check \`available_dates()\` | Potentially outdated (up to 12 months) |
+| r_ver = "bleeding-edge" | To develop against the latest release of CRAN | Always current | Always current | Always current | Always current |
+| r_ver = "frozen-edge" | To develop against the latest release of CRAN, but manually manage updates | Current at time of generation | Current at time of generation | Current at time of generation | Current at time of generation |
+| r_ver = "r-devel" | To develop/test against the development version of R | Development version | Always current | Always current | Always current |
+| r_ver = "r-devel-bioc-devel" | To develop/test against the development version of R and Bioconductor | Development version | Always current | Development version | Always current |
+| r_ver = "bioc-devel" | To develop/test against the development version of Bioconductor | Always current | Always current | Development version | Always current |
+
+If you want to benefit from relatively fresh packages and have a stable
+environment for production purposes, using `"latest-upstream"` or the
+most recent available date for `r_ver` is probably your best option.
+
+## Running old projects with {rix}
+
+The example below shows how to create a `default.nix` with instructions
+to build an environment with R version 4.2.1, the
+[dplyr](https://dplyr.tidyverse.org) and
+[janitor](https://github.com/sfirke/janitor) packages and no specific
+IDE:
+
+``` r
+
+path_default_nix <- tempdir()
+
+rix(
+  r_ver = "4.2.1",
+  r_pkgs = c("dplyr", "janitor"),
+  system_pkgs = c("quarto"),
+  git_pkgs = NULL,
+  ide = "none",
+  project_path = path_default_nix,
+  overwrite = TRUE
+)
+```
+
+The file looks like this:
+
+    #> let
+    #>  pkgs = import (fetchTarball "https://github.com/rstats-on-nix/nixpkgs/archive/2022-10-20.tar.gz") {};
+    #>
+    #>   rpkgs = builtins.attrValues {
+    #>     inherit (pkgs.rPackages)
+    #>       dplyr
+    #>       janitor;
+    #>   };
+    #>
+    #>   system_packages = builtins.attrValues {
+    #>     inherit (pkgs)
+    #>       glibcLocales
+    #>       nix
+    #>       quarto
+    #>       R;
+    #>   };
+    #>
+    #> in
+    #>
+    #> pkgs.mkShell {
+    #>   LOCALE_ARCHIVE = if pkgs.system == "x86_64-linux" then "${pkgs.glibcLocales}/lib/locale/locale-archive" else "";
+    #>   LANG = "en_US.UTF-8";
+    #>    LC_ALL = "en_US.UTF-8";
+    #>    LC_TIME = "en_US.UTF-8";
+    #>    LC_MONETARY = "en_US.UTF-8";
+    #>    LC_PAPER = "en_US.UTF-8";
+    #>    LC_MEASUREMENT = "en_US.UTF-8";
+    #>
+    #>   buildInputs = [  rpkgs  system_packages   ];
+    #>
+    #> }
+
+Or use a date for a dated environment (if you use `r_ver = 4.4.2`
+instead of the date in the call below, this will generate the same
+expression, as this is the version of R that is included at that date):
+
+    rix(
+      date = "2024-12-14",
+      r_pkgs = c("dplyr", "ggplot2"),
+      system_pkgs = NULL,
+      git_pkgs = NULL,
+      ide = "code",
+      project_path = path_default_nix,
+      overwrite = TRUE,
+      print = TRUE
+    )
+
+    #> let
+    #>  pkgs = import (fetchTarball "https://github.com/rstats-on-nix/nixpkgs/archive/2024-12-14.tar.gz") {};
+    #>
+    #>   rpkgs = builtins.attrValues {
+    #>     inherit (pkgs.rPackages)
+    #>       dplyr
+    #>       ggplot2
+    #>       languageserver;
+    #>   };
+    #>
+    #>   system_packages = builtins.attrValues {
+    #>     inherit (pkgs)
+    #>       glibcLocales
+    #>       nix
+    #>       R;
+    #>   };
+    #>
+    #> in
+    #>
+    #> pkgs.mkShell {
+    #>   LOCALE_ARCHIVE = if pkgs.system == "x86_64-linux" then "${pkgs.glibcLocales}/lib/locale/locale-archive" else "";
+    #>   LANG = "en_US.UTF-8";
+    #>    LC_ALL = "en_US.UTF-8";
+    #>    LC_TIME = "en_US.UTF-8";
+    #>    LC_MONETARY = "en_US.UTF-8";
+    #>    LC_PAPER = "en_US.UTF-8";
+    #>    LC_MEASUREMENT = "en_US.UTF-8";
+    #>
+    #>   buildInputs = [  rpkgs  system_packages   ];
+    #>
+    #> }
+
+The first line is quite important, as it shows which *revision* of
+`nixpkgs` is being used for this environment, as well as the fork. In
+the two last examples, the expression will use our `rstats-on-nix` fork
+which includes many fixes for older packages, especially for Apple
+Silicon devices. The first expression in this vignette, the one
+generated with `r_ver = "latest-upstream"` uses the upstream `nixpkgs`
+from the NixOS project.
+
+The *revision* is the commit hash of that particular release of
+`nixpkgs`, here it’s a date, because our fork of `nixpkgs` uses dates as
+branches names, and we are actually pointing to the head of those
+branches. When generating a `default.nix` using
+`r_ver = "latest-upstream"`, a commit is shown instead. This dated
+branch of our `rstats-on-nix` `nixpkgs` fork is the one that shipped
+version 4.2.1 of R, so the [dplyr](https://dplyr.tidyverse.org) and
+[janitor](https://github.com/sfirke/janitor) packages that will get
+installed will be the versions available in that date as well. This
+means that R versions and package versions are always coupled when using
+Nix. However, if you need a specific version of R, but also a specific
+version of a package that is not available in that particular Nix
+revision, one solution is to install that package from GitHub or from
+the CRAN archives. Read the vignette
+[`vignette("installing-r-packages")`](https://docs.ropensci.org/rix/articles/installing-r-packages.md)
+to know more about this.
+
+[`available_df()`](https://docs.ropensci.org/rix/reference/available_df.md)
+provides an overview of available R and Bioconductor releases, and their
+compatibility with different operating systems; in short, on Linux
+(including WSL on Windows), every available R version or date should
+work, while for macOS, every available date will likely work on Intel
+Macs, while only R version 4.0.5 and up will work on Apple Silicon.
+
+## Running programs from an environment
+
+You could create a bash script that you put in the path to make the
+process of launching your editor from that environment more streamlined.
+For example, if your project is called `housing`, you could create this
+script and execute it to start your project:
+
+    #!/bin/bash
+    nix-shell /absolute/path/to/housing/default.nix --run code
+
+This will execute VS Code in the environment for the `housing` project.
+If you use [targets](https://docs.ropensci.org/targets/) you could
+execute the pipeline in the environment by running:
+
+    cd /absolute/path/to/housing/ && nix-shell default.nix --run "Rscript -e 'targets::tar_make()'"
+
+## Running single functions in a subshell
+
+It is also possible to run single functions in an isolated environment
+from an active R session using
+[`with_nix()`](https://docs.ropensci.org/rix/reference/with_nix.md) and
+get the output of that function loaded into the current session. Refer
+to this vignette
+[`vignette("running-code-in-nix")`](https://docs.ropensci.org/rix/articles/running-code-in-nix.md)
+for more details on how to achieve this. Concretely this means that you
+could be running R version 4.3.2 (installed via Nix, or not), and
+execute a function on R version 4.0.0 for example in a subshell (or
+execute a function that requires an old version of a package in that
+subshell), and get the result of the computation back into the main R
+session.
+
+## Nix environments are not completely isolated from your system
+
+It is important to know that an environment built by Nix is not totally
+isolated from the rest of the system. Suppose that you have the program
+`sl` installed on your system, and suppose you build a Nix environment
+that also comes with `sl`. If you activate that environment, the version
+of `sl` that will run when called is the one included in the Nix
+environment. If, however, you start `sl` in a Nix environment that does
+not come with it, then your system’s `sl` will get used instead.
+
+In the context of the R programming language, this means that if you
+have a user or system library of packages (meaning, a library of
+packages generated by a regular installation of R), these packages may
+be loaded by an R version running from a Nix shell. To avoid issues with
+this, calling [`rix()`](https://docs.ropensci.org/rix/reference/rix.md)
+automatically runs
+[`rix_init()`](https://docs.ropensci.org/rix/reference/rix_init.md) as
+well, which generates a custom `.Rprofile` file in the project’s
+directory. This way, your regular user library of packages will not
+interfere with R environments managed by Nix. Moreover, this custom
+`.Rprofile` also redefines
+[`install.packages()`](https://rdrr.io/r/utils/install.packages.html)
+and makes it throw an error: indeed, if you wish to add packages to your
+an R environment managed by Nix, you should add these packages to the
+`default.nix` file instead, and rebuild the environment.
+
+If you want to even make other programs inaccessible to a running Nix
+environment, you can drop into it using `nix-shell --pure` instead of
+only `nix-shell`.
