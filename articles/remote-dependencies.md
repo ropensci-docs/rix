@@ -1,0 +1,572 @@
+# Handling Packages with Remote Dependencies
+
+## Introduction
+
+Packages published on CRAN must have their dependencies on either CRAN
+or Bioconductor, but not on Git hosting platforms. However, there are
+many packages available on GitHub, GitLab, Forgejo, Gitea and other Git
+hosting platforms that never get published on CRAN, and some of these
+packages may even depend on other packages that are also only available
+on these platforms. [rix](https://docs.ropensci.org/rix/) makes it
+possible to install packages from these Git hosting platforms, and if
+these packages have dependencies that are also on GitHub, these also get
+correctly added to the generated `default.nix`.
+
+There are however certain caveats you should be aware of.
+
+## The {lookup} package
+
+As an example we are going to use the
+[{lookup}](https://github.com/jimhester/lookup) package which has only
+been released on GitHub. [Here is the
+repository](https://github.com/jimhester/lookup). This package comes
+with the `lookup()` function which makes it possible to check the source
+code of any function from a loaded package, even if the source of that
+function is in C or Fortran. To create a reproducible development
+environment that makes [{lookup}](https://github.com/jimhester/lookup)
+available to you, you could use the following
+[`rix::rix()`](https://docs.ropensci.org/rix/reference/rix.md) call:
+
+``` r
+
+path_default_nix <- tempdir()
+
+rix(
+  r_ver = "latest-upstream",
+  r_pkgs = NULL,
+  system_pkgs = NULL,
+  git_pkgs = list(
+    package_name = "lookup",
+    repo_url = "https://github.com/jimhester/lookup/",
+    commit = "eba63db477dd2f20153b75e2949eb333a36cccfc"
+  ),
+  ide = "none",
+  project_path = path_default_nix,
+  overwrite = TRUE,
+  print = TRUE
+)
+```
+
+This will generate the following `default.nix`:
+
+    let
+     pkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/ceea3d99cd55e2b343295eea205b19ecc47fe888.tar.gz") {};
+      
+        httr2 = (pkgs.rPackages.buildRPackage {
+          name = "httr2";
+          src = pkgs.fetchgit {
+            url = "https://github.com/r-lib/httr2";
+            rev = "c249b90d5c72d91ad5fab0660904710c56fd4568";
+            sha256 = "sha256-x/q2oOqseencAFro73Dxoa2CuyiXnm5NNT1K77HgmLE=";
+          };
+          propagatedBuildInputs = builtins.attrValues {
+            inherit (pkgs.rPackages) 
+              cli
+              curl
+              glue
+              lifecycle
+              magrittr
+              openssl
+              R6
+              rappdirs
+              rlang
+              vctrs
+              withr;
+          };
+        });
+
+        gh = (pkgs.rPackages.buildRPackage {
+          name = "gh";
+          src = pkgs.fetchgit {
+            url = "https://github.com/gaborcsardi/gh";
+            rev = "HEAD";
+            sha256 = "sha256-0ah0s9vvrJQcnOt6Be4oKIo+qD6OAiTTBZ7Upv7Vh9M=";
+          };
+          propagatedBuildInputs = builtins.attrValues {
+            inherit (pkgs.rPackages) 
+              cli
+              gitcreds
+              glue
+              ini
+              jsonlite
+              lifecycle
+              rlang;
+          } ++ [ httr2 ];
+        });
+
+
+        highlite = (pkgs.rPackages.buildRPackage {
+          name = "highlite";
+          src = pkgs.fetchgit {
+            url = "https://github.com/jimhester/highlite";
+            rev = "767b122ef47a60a01e1707e4093cf3635a99c86b";
+            sha256 = "sha256-lkWMlAi75MYxiBUYnLwxLK9ApXkWanA4Mt7g4qtLpxM=";
+          };
+          propagatedBuildInputs = builtins.attrValues {
+            inherit (pkgs.rPackages) 
+              Rcpp
+              BH;
+          };
+        });
+
+
+        memoise = (pkgs.rPackages.buildRPackage {
+          name = "memoise";
+          src = pkgs.fetchgit {
+            url = "https://github.com/hadley/memoise";
+            rev = "58d39726de141fefd235557a33e6478f76b0ad7f";
+            sha256 = "sha256-y3UGutqIFFZn3z5dJzkzs/Fcdwc/+h+5iWofUP5NYic=";
+          };
+          propagatedBuildInputs = builtins.attrValues {
+            inherit (pkgs.rPackages) 
+              digest;
+          };
+        });
+
+        lookup = (pkgs.rPackages.buildRPackage {
+          name = "lookup";
+          src = pkgs.fetchgit {
+            url = "https://github.com/jimhester/lookup/";
+            rev = "eba63db477dd2f20153b75e2949eb333a36cccfc";
+            sha256 = "sha256-arl7LVxL8xGUW3LhuDCSUjcfswX0rdofL/7v8Klw8FM=";
+          };
+          propagatedBuildInputs = builtins.attrValues {
+            inherit (pkgs.rPackages) 
+              Rcpp
+              codetools
+              crayon
+              rex
+              jsonlite
+              rstudioapi
+              withr
+              httr;
+          } ++ [ highlite gh memoise ];
+        });
+        
+      system_packages = builtins.attrValues {
+        inherit (pkgs) 
+          glibcLocales
+          nix
+          R;
+      };
+      
+    in
+
+    pkgs.mkShell {
+      LOCALE_ARCHIVE = if pkgs.system == "x86_64-linux" then "${pkgs.glibcLocales}/lib/locale/locale-archive" else "";
+      LANG = "en_US.UTF-8";
+       LC_ALL = "en_US.UTF-8";
+       LC_TIME = "en_US.UTF-8";
+       LC_MONETARY = "en_US.UTF-8";
+       LC_PAPER = "en_US.UTF-8";
+       LC_MEASUREMENT = "en_US.UTF-8";
+
+      buildInputs = [ lookup   system_packages   ];
+      
+    }
+
+as you can see, several other packages hosted on GitHub were added
+automatically. This is because these were listed as remote dependencies
+in [lookup](https://kwstat.github.io/lookup/)’s `DESCRIPTION` file:
+
+    Remotes:
+        jimhester/highlite,
+        gaborcsardi/gh,
+        hadley/memoise
+
+[rix](https://docs.ropensci.org/rix/) uses the APIs of supported Git
+hosting platforms (GitHub, GitLab, Forgejo, Gitea) to fetch the commits
+of these remote packages and will attempt to select the commit of the
+remote packages, whose date is closest to (always before, never after)
+the date of the commit provided by the user.
+
+## Caveats
+
+### Fixed commits
+
+[rix](https://docs.ropensci.org/rix/) is able to fetch a fixed commit
+specified in DESCRIPTION files using a commit hash. This also works in a
+short form. For example `ropensci/rix@88bb24f` in `Remotes` in the
+DESCRIPTION file will work. However, if a branch name (e.g.
+`ropensci/rix@available_dates`), tag (e.g. `ropensci/rix@v.0.8.0`), or
+pull request number (e.g. `ropensci/rix#100`) is specified,
+[rix](https://docs.ropensci.org/rix/) will ignore this and will try to
+fetch the closest commit (see above).
+
+### Duplicated packages
+
+Let’s say package `A` depends on package `B` and `C`, but package `B`
+also depends on package `C`. Then this would usually result in a
+duplicate entry of package `C` in the `default.nix` file. To avoid this,
+[rix](https://docs.ropensci.org/rix/) will cache all packages that have
+been fetched from Git hosting platforms and will not fetch them again if
+they are already in the cache. This also avoids unnecessary API calls.
+If you would like to disable this feature, you can set
+`ignore_remotes_cache = TRUE` in the
+[`rix()`](https://docs.ropensci.org/rix/reference/rix.md) call, which
+might be useful for debugging purposes. Be aware that you need to
+manually remove the duplicates from the `default.nix` file before
+`nix-build` will work in this case.
+
+Unlike with packages hosted on CRAN, packages hosted on Git platforms
+(GitHub, GitLab, Forgejo, Gitea, etc.) may incorrectly specify their
+dependencies. [rix](https://docs.ropensci.org/rix/) will always try to
+generate syntactically correct expressions, but if dependencies are not
+correctly specified (for example, if a remote dependency got updated in
+a way that breaks the main package), you will need to manually inspect
+and fix the file.
+
+Consider the following scenario: let’s say the commit of package `A`
+that you specify in the
+[`rix()`](https://docs.ropensci.org/rix/reference/rix.md) call was
+committed on the 1st of January 2025. Then
+[rix](https://docs.ropensci.org/rix/) will try to find the commit, whose
+date is closest to the 1st of January 2025, for package `B` and `C`.
+Let’s say this is the 1st November 2024 for package `B` and the 1st
+December 2024 for package `C`. By default (so
+`ignore_remotes_cache = FALSE`), then
+[rix](https://docs.ropensci.org/rix/) will fetch commits on these dates.
+However, if you would ignore the cache (by setting
+`ignore_remotes_cache = TRUE`), then
+[rix](https://docs.ropensci.org/rix/) will fetch package `C` twice, once
+for the commit of the 1st December 2024 as before (closest date that is
+earlier than the commit date of package `A`) and once for a date before
+the 1st November 2024 (closest date that is earlier than the commit date
+of package `B`). Again you would need to manually remove the duplicates
+from the `default.nix` file before `nix-build` will work. Be aware of
+dependency issues: for example the older version of package `C` might be
+incompatible with package `A`, so you might need to manually look for
+the right commit of `C` that works with both `A` and `B`.
+
+### Authenticating to GitHub
+
+Note: [rix](https://docs.ropensci.org/rix/) will only be able to fetch a
+maximum of 3000 commits. That means if the commit you provided is rather
+old or if the package has many commits, this will fail and fallback to
+the `HEAD` of the repository. If this happens you should see a message
+like this:
+
+    Failed to get commit date for <<< satijalab/seurat-wrappers >>> No commits found before or on the target date
+    Falling back to <<< HEAD >>>
+
+If you don’t have a Github Personal Acccess Token set up, it will show:
+
+    When fetching the commit date from GitHub from <<< ropensci/rix >>>, no GitHub Personal Access Token found.
+    Please set GITHUB_PAT in your environment.
+    Falling back to unauthenticated API request.
+
+This should still work until you hit the API limit, in which case you
+will see messages, such as this one:
+
+    Failed to get commit date for <<< satijalab/seurat-wrappers >>> API request failed with status code 403.
+    Falling back to <<< HEAD >>>
+
+The status code 403 tells you that there is a credentials error (e.g.,
+because you hit the API limit). This is why we highly recommend that you
+set up a GitHub Personal Access Token: this will allow
+[rix](https://docs.ropensci.org/rix/) to perform authenticated calls to
+the API, meaning that [rix](https://docs.ropensci.org/rix/) will be able
+to get up to 5000 API calls per hour, instead of 60, dramatically
+improving the odds of success. To set a GitHub PAT for the current
+session, simply run:
+
+    Sys.setenv(GITHUB_PAT="YOUR_TOKEN")
+
+Of course, you need to create a [GitHub PAT
+first](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic).
+If don’t want to always have to set the `GITHUB_PAT` environment
+variable, you can also use a more [long term
+solution](https://gitcreds.r-lib.org/index.html). For more information
+on GitHub Tokens, please also refer to [Happy Git and GitHub for the
+useR](https://happygitwithr.com/https-pat). For permanent storage, also
+refer to [this stackoverflow
+question](https://stackoverflow.com/a/5343146/21417317).
+
+Note: If you use [gitcreds](https://gitcreds.r-lib.org/), you still need
+to set the `GITHUB_PAT` variable explicitly for each session before
+calling [rix](https://docs.ropensci.org/rix/). To avoid exposing your
+PAT in your code, you could use:
+
+    my_token <- gitcreds::gitcreds_get()$password
+    Sys.setenv(GITHUB_PAT = my_token)
+
+However, you might still be getting the following message, even after
+correctly configuring a GitHub PAT:
+
+    Failed to get closest commit for gaborcsardi/gh: Failed to download commit data
+    Argument 'url' must be string..
+    Falling back to <<< HEAD >>>
+
+In this particular case, it might be due to the fact that the url
+`https://github.com/gaborcsardi/gh` now points to
+`https://github.com/r-lib/gh`. In instances like this, we recommend to
+manually change the url and the revision from `"HEAD"` to an actual
+commit. If you don’t do this, this means that if these repositories are
+being actively worked on, rebuilding these environments will actually
+pull another version of these packages. So we very highly recommend to
+edit the `default.nix`, and replace mentions of `HEAD` (if any) with an
+actual commit. For example, edit this:
+
+    gh = (pkgs.rPackages.buildRPackage {
+      name = "gh";
+      src = pkgs.fetchgit {
+        url = "https://github.com/gaborcsardi/gh";
+        rev = "HEAD";
+        sha256 = "sha256-0ah0s9vvrJQcnOt6Be4oKIo+qD6OAiTTBZ7Upv7Vh9M=";
+      };
+      propagatedBuildInputs = builtins.attrValues {
+        inherit (pkgs.rPackages)
+          cli
+          gitcreds
+          glue
+          ini
+          jsonlite
+          lifecycle
+          rlang;
+      } ++ [ httr2 ];
+    });
+
+to this:
+
+    gh = (pkgs.rPackages.buildRPackage {
+      name = "gh";
+      src = pkgs.fetchgit {
+        url = "https://github.com/gaborcsardi/gh";
+        rev = "27db16cf363dc";
+        sha256 = ""; # <- You will need to try to build the expression once, and then
+      };             # <- put the sha256 that nix-build returns
+      propagatedBuildInputs = builtins.attrValues {
+        inherit (pkgs.rPackages)
+          cli
+          gitcreds
+          glue
+          ini
+          jsonlite
+          lifecycle
+          rlang;
+      } ++ [ httr2 ];
+    });
+
+Finally, and if instead the remotes are listed like this:
+
+    Remotes:
+        jimhester/highlite@abc123,
+        gaborcsardi/gh@def123,
+        hadley/memoise@ghi123
+
+then the listed commits will be used, which will make sure that the
+build process is reproducible. Only commits can be used, anything else
+listed there (such as pull request numbers or release tags) will not
+work with [rix](https://docs.ropensci.org/rix/).
+
+### Consider using dependencies that made it to CRAN
+
+`{highlite}` is a dependency of
+[{lookup}](https://github.com/jimhester/lookup) that is only available
+on GitHub. [gh](https://gh.r-lib.org/) and
+[memoise](https://memoise.r-lib.org) are also listed as remote
+dependencies, however, they are also available on CRAN now. This was not
+the case at the time when [lookup](https://kwstat.github.io/lookup/) was
+written (which was more than 6 years ago as of 2025). Because they are
+listed as remote dependencies, they will also be built from GitHub
+instead of CRAN.
+
+Here, it is up to you to decide if you want to keep the GitHub version
+of these packages, or if you should instead include the released CRAN
+version. Depending on what you want to do, going for the CRAN release of
+the packages might be advisable. For example in this case, trying to
+build this expression will not work.
+
+This is because [httr2](https://httr2.r-lib.org) is a package that needs
+to be compiled from source and which needs some Nix-specific fixes
+applied to its source code for it to build successfully. Installing the
+version provided by `nixpkgs`, which builds upon the released CRAN
+version will succeed however. To do so, change the `default.nix`
+manually to this (essentially remove the definition of
+[httr2](https://httr2.r-lib.org) and put it as a `propagatedBuildInput`
+to [gh](https://gh.r-lib.org/)):
+
+    let
+     pkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/6a25f33c843a45b8d67ba782b6782973a7265774.tar.gz") {};
+
+        gh = (pkgs.rPackages.buildRPackage {
+          name = "gh";
+          src = pkgs.fetchgit {
+            url = "https://github.com/gaborcsardi/gh";
+            rev = "HEAD";
+            sha256 = "sha256-VpxFIfUEk0PudytQ3boMhEJhT0AnelWkSU++WD/HAyo=";
+          };
+          propagatedBuildInputs = builtins.attrValues {
+            inherit (pkgs.rPackages)
+              cli
+              gitcreds
+              glue
+              httr2 # <- httr2 is now declared here, so it's the CRAN version
+              ini
+              jsonlite
+              lifecycle
+              rlang;
+          };
+        });
+
+        highlite = (pkgs.rPackages.buildRPackage {
+          name = "highlite";
+          src = pkgs.fetchgit {
+            url = "https://github.com/jimhester/highlite";
+            rev = "767b122ef47a60a01e1707e4093cf3635a99c86b";
+            sha256 = "sha256-lkWMlAi75MYxiBUYnLwxLK9ApXkWanA4Mt7g4qtLpxM=";
+          };
+          propagatedBuildInputs = builtins.attrValues {
+            inherit (pkgs.rPackages)
+              Rcpp
+              BH;
+          };
+        });
+
+        memoise = (pkgs.rPackages.buildRPackage {
+          name = "memoise";
+          src = pkgs.fetchgit {
+            url = "https://github.com/hadley/memoise";
+            rev = "58d39726de141fefd235557a33e6478f76b0ad7f";
+            sha256 = "sha256-y3UGutqIFFZn3z5dJzkzs/Fcdwc/+h+5iWofUP5NYic=";
+          };
+          propagatedBuildInputs = builtins.attrValues {
+            inherit (pkgs.rPackages)
+              digest;
+          };
+        });
+
+        lookup = (pkgs.rPackages.buildRPackage {
+          name = "lookup";
+          src = pkgs.fetchgit {
+            url = "https://github.com/jimhester/lookup/";
+            rev = "eba63db477dd2f20153b75e2949eb333a36cccfc";
+            sha256 = "sha256-arl7LVxL8xGUW3LhuDCSUjcfswX0rdofL/7v8Klw8FM=";
+          };
+          propagatedBuildInputs = builtins.attrValues {
+            inherit (pkgs.rPackages)
+              Rcpp
+              codetools
+              crayon
+              rex
+              jsonlite
+              rstudioapi
+              withr
+              httr;
+          } ++ [ highlite gh memoise ];
+        });
+
+      system_packages = builtins.attrValues {
+        inherit (pkgs)
+          glibcLocales
+          nix
+          R;
+      };
+
+    in
+
+    pkgs.mkShell {
+      LOCALE_ARCHIVE = if pkgs.system == "x86_64-linux" then "${pkgs.glibcLocales}/lib/locale/locale-archive" else "";
+      LANG = "en_US.UTF-8";
+       LC_ALL = "en_US.UTF-8";
+       LC_TIME = "en_US.UTF-8";
+       LC_MONETARY = "en_US.UTF-8";
+       LC_PAPER = "en_US.UTF-8";
+       LC_MEASUREMENT = "en_US.UTF-8";
+
+      buildInputs = [ lookup   system_packages   ];
+
+    }
+
+In this manually edited expression, [httr2](https://httr2.r-lib.org)
+will now build successfully because Nix is instructed to build the CRAN
+version by applying [this
+fix](https://github.com/NixOS/nixpkgs/blob/7b87fced8bc525d466c7258a042bd12ea336a3c6/pkgs/development/r-modules/default.nix#L1817)
+which was added there by packagers and maintainers of the R programming
+language for `nixpkgs` (it is exactly the same if you tried to install
+[httr2](https://httr2.r-lib.org) from GitHub on Windows: you would need
+to build it from source and thus make sure that you have the required
+system-level dependencies to build it. Instead, it is easier to install
+a pre-compiled binary from CRAN).
+
+## Custom Git hosting platforms
+
+In addition to GitHub and GitLab, [rix](https://docs.ropensci.org/rix/)
+also supports packages hosted on custom Git platforms based on Forgejo,
+Gitea, cgit, and other Git hosting services. The usage is identical to
+GitHub and GitLab — simply provide the full repository URL and commit
+hash:
+
+``` r
+
+path_default_nix <- tempdir()
+
+rix(
+  r_ver = "latest-upstream",
+  r_pkgs = c("dplyr"),
+  git_pkgs = list(
+    list(
+      package_name = "opusreader2",
+      repo_url = "https://codefloe.com/spectral-cockpit/opusreader2",
+      commit = "36a9b82835d42c039dc5e202337beb290bba7f85"
+    )
+  ),
+  ide = "none",
+  project_path = path_default_nix,
+  overwrite = TRUE
+)
+```
+
+This example installs a package from a repository hosted on
+codefloe.com, which runs Forgejo. [rix](https://docs.ropensci.org/rix/)
+automatically detects the Git hosting platform and constructs the
+appropriate archive download URL. Most Git hosting platforms follow
+either the GitHub-style archive URL format (`/archive/<commit>.tar.gz`)
+or the GitLab-style format (`/-/archive/<commit>.tar.gz`), and
+[rix](https://docs.ropensci.org/rix/) will use the GitHub-style format
+by default for unknown platforms, which works for most (self-)hosted Git
+instances.
+
+**Supported Git hosting platforms:**
+
+[rix](https://docs.ropensci.org/rix/) has full support for the following
+Git hosting platforms, including automatic commit date fetching via
+their APIs:
+
+- **GitHub** (github.com)
+- **GitLab** (gitlab.com)
+- **Forgejo** (e.g., codefloe.com, codeberg.org)
+- **Gitea** (self-hosted instances)
+
+For other custom Git hosts without standardized APIs,
+[rix](https://docs.ropensci.org/rix/) will still attempt to download the
+package source but will use the current date as a fallback for commit
+dates.
+
+**Important notes:**
+
+- Remote dependencies listed in the `Remotes` field of DESCRIPTION files
+  are assumed to be on GitHub. If your package has remote dependencies
+  on other platforms, you’ll need to specify them manually in the
+  `git_pkgs` list.
+- Make sure the Git hosting platform is publicly accessible, as Nix will
+  need to download the source code during the build process.
+- When using `r_ver = "latest-upstream"`, a GitHub Personal Access Token
+  (GITHUB_PAT) is recommended to avoid API rate limiting when querying
+  the NixOS/nixpkgs repository. Alternatively, use a specific R version
+  instead.
+
+## Conclusion
+
+In conclusion, [rix](https://docs.ropensci.org/rix/) makes it easier to
+build packages from GitHub, GitLab, Forgejo, Gitea, and other custom Git
+hosts which have themselves dependencies hosted on these platforms.
+[rix](https://docs.ropensci.org/rix/) automatically fetches commit dates
+from supported platforms (GitHub, GitLab, Forgejo, Gitea) to ensure
+reproducible builds. You should however make sure that the expression
+that is generated uses fixed commits instead of `HEAD` for the packages
+being built from Git (if [rix](https://docs.ropensci.org/rix/) wasn’t
+able to automatically fetch the right commit for you), and you should
+also decide if you want to use the version of a package hosted on Git
+instead of the CRAN release. These are decisions that
+[rix](https://docs.ropensci.org/rix/) cannot take for you.
